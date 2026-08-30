@@ -1,0 +1,14 @@
+# dsh-plugin-dsh-continue bundle patch: contributes the plugin row into the host
+# composition when this package is installed via `dsh plugin add` (or, in this
+# repo's web profile, via a github path: dependency).
+#
+# The plugin is HOST-PLANE: it subscribes to the process-wide session/event
+# stream and, when a turn ends in a transport error / crash-orphan, calls
+# agent.followup('继续') on the same live session to resume it. It also serves
+# a small HTTP API over a webServer route and a settings-page section. It must
+# therefore land in the host composition (this insert), never inside an agent
+# preset.
+
+- insert:
+    - id: dsh-continue
+      name: 'dsh-plugin-dsh-continue'
