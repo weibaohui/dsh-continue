@@ -31,13 +31,3 @@ dsh plugin --profile web add @weibaohui/dsh-continue -w
 2. 总开关默认开启，默认规则表已覆盖常见失败场景
 3. 想自定义：编辑规则表（匹配条件 + 动作）、调整续跑上限/退避参数、选备用模型
 4. 失败发生时插件自动介入；会话里会收到续跑与停止原因的通知，活动日志在设置页可查
-
-## 发版（维护者）
-
-```bash
-npm version patch            # bump + commit + tag
-git push --follow-tags
-gh release create vX.Y.Z --generate-notes   # 创建 Release 触发自动发布到 npm
-```
-
-发布由 GitHub Actions 完成（Release published 触发；打 tag 不发布），走 npm Trusted Publishing 免 token。
