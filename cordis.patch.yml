@@ -12,3 +12,11 @@
 - insert:
     - id: dsh-continue
       name: 'dsh-plugin-dsh-continue'
+
+# 本插件的 compact 规则动作依赖 ctx.compaction（CompactionEngine）。web bundle
+# 把 compaction-basic 标成了 disabled: true，而插件静态注入了 'compaction'
+# 服务——服务缺席会让插件 fiber 永久 pending 并导致宿主 boot 失败。因此这里
+# 随插件一并重新启用（本层在 web bundle 层之后应用，同 id 覆盖生效）。
+# 不希望启用压缩：删除本段，并把设置里的 compact 规则动作改掉。
+- id: compaction-basic
+  disabled: false

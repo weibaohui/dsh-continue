@@ -70,6 +70,29 @@ window.__ModuleLoader__.load({
       title: '自动续跑',
       armed: '已就绪',
       notArmed: '未就绪',
+      secBasics: '基础',
+      secRules: '续跑规则（从上到下匹配，先命中先用）',
+      rulesHint: '每条规则 = 匹配条件 + 动作。某轮失败时从上往下找第一条命中的规则执行；该规则设了次数上限且用尽后，自动继续往下找。所有规则都不适用时按达到全局上限处理。',
+      ruleWhen: '匹配条件',
+      ruleAction: '动作',
+      ruleMaxAttempts: '本规则最多执行（次，0 = 不限）',
+      ruleUp: '上移',
+      ruleDown: '下移',
+      ruleRemove: '删除',
+      addRule: '添加规则',
+      noRules: '暂无规则——至少保留一条「任意失败」兜底规则，否则失败时不会自动续跑。',
+      when_rateLimit: '限流（429）',
+      when_quota: '额度耗尽',
+      when_auth: '鉴权失败',
+      when_context: '上下文超限',
+      when_server: '服务端错误（5xx）',
+      when_transport: '传输 / 网络错误',
+      when_interrupted: '崩溃孤儿轮',
+      when_any: '任意失败（兜底）',
+      act_continue: '继续续跑',
+      'act_continue-with': '换模型继续',
+      act_compact: '压缩后继续（先压缩上下文，成功再续跑）',
+      act_stop: '停止并通知',
       enabled: '启用自动续跑',
       promptLabel: '续跑 prompt',
       promptHint: '检测到传输错误/崩溃孤儿轮时，向同一会话投递的文本',
@@ -81,6 +104,20 @@ window.__ModuleLoader__.load({
       backoffHint: '每次续跑前等待 base * 2^attempt，上限封顶',
       retryOnError: '传输错误时续跑',
       retryOnInterrupted: '崩溃孤儿轮时续跑',
+      retryOnRateLimit: '限流（429）时续跑',
+      retryOnQuota: '额度耗尽时续跑',
+      retryOnAuth: '鉴权失败时续跑',
+      followupModelLabel: '续跑模型（可选）',
+      followupModelHint: '续跑轮改用此模型；选「沿用当前」= 不切换',
+      followupProviderLabel: '续跑 provider（可选）',
+      followupProviderHint: '配合续跑模型的路由；选「沿用当前」= 不切换',
+      fallbackAfterLabel: '连续失败 N 次后换模型',
+      fallbackAfterHint: '同一失败簇内续跑 N 次仍失败，后续续跑自动改用备用模型（备用模型选「沿用当前」= 不切换）',
+      fallbackProviderLabel: '备用 provider（可选）',
+      fallbackModelLabel: '备用模型（可选）',
+      catalogUnavailable: '模型目录不可用',
+      followupUseCurrent: '沿用当前',
+      followupCurrentSetting: '当前设置',
       notifyOnCap: '达上限时通知会话',
       save: '保存',
       saved: '设置已保存',
@@ -103,6 +140,29 @@ window.__ModuleLoader__.load({
       title: 'Auto-continue',
       armed: 'armed',
       notArmed: 'not armed',
+      secBasics: 'Basics',
+      secRules: 'Continue rules (matched top-down; first hit wins)',
+      rulesHint: 'Each rule = a match condition + an action. On a failed turn the engine walks the list and runs the first rule that matches and is not exhausted (its own attempt cap, if set). When nothing applies, the global cap handling kicks in.',
+      ruleWhen: 'Match condition',
+      ruleAction: 'Action',
+      ruleMaxAttempts: 'Max runs for this rule (0 = unlimited)',
+      ruleUp: 'Up',
+      ruleDown: 'Down',
+      ruleRemove: 'Remove',
+      addRule: 'Add rule',
+      noRules: 'No rules — keep at least one "any failure" fallback rule, otherwise failed turns will not auto-continue.',
+      when_rateLimit: 'Rate limit (429)',
+      when_quota: 'Quota exhausted',
+      when_auth: 'Auth failure',
+      when_context: 'Context window exceeded',
+      when_server: 'Server error (5xx)',
+      when_transport: 'Transport / network error',
+      when_interrupted: 'Crash-orphan turn',
+      when_any: 'Any failure (fallback)',
+      act_continue: 'Continue (current model)',
+      'act_continue-with': 'Continue with another model',
+      act_compact: 'Compact then continue',
+      act_stop: 'Stop and notify',
       enabled: 'Enable auto-continue',
       promptLabel: 'Continue prompt',
       promptHint: 'Text re-sent to the same session on transport error / crash-orphan turn',
@@ -114,6 +174,20 @@ window.__ModuleLoader__.load({
       backoffHint: 'Wait base * 2^attempt before each continue, capped',
       retryOnError: 'Retry on transport error',
       retryOnInterrupted: 'Retry on crash-orphan turn',
+      retryOnRateLimit: 'Retry on rate limit (429)',
+      retryOnQuota: 'Retry on quota exhaustion',
+      retryOnAuth: 'Retry on auth failure',
+      followupModelLabel: 'Continue model (optional)',
+      followupModelHint: 'Continue turns use this model; "keep current" = no switch',
+      followupProviderLabel: 'Continue provider (optional)',
+      followupProviderHint: 'Provider route for the continue model; "keep current" = no switch',
+      fallbackAfterLabel: 'Switch model after N failures',
+      fallbackAfterHint: 'After N failed continues in one cluster, later continues switch to the fallback model ("keep current" = no switch)',
+      fallbackProviderLabel: 'Fallback provider (optional)',
+      fallbackModelLabel: 'Fallback model (optional)',
+      catalogUnavailable: 'Model catalog unavailable',
+      followupUseCurrent: 'Keep current',
+      followupCurrentSetting: 'current setting',
       notifyOnCap: 'Notify session on cap',
       save: 'Save',
       saved: 'Settings saved',
@@ -195,6 +269,16 @@ window.__ModuleLoader__.load({
     .dc-input{min-height:32px;padding:6px 12px;border-radius:8px;border:1px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-layer-2);color:var(--dsw-alias-label-primary);font-size:13px;font-family:var(--dsw-font-family);outline:none;box-sizing:border-box}
     .dc-input:focus{border-color:var(--dsw-alias-state-business-primary)}
     .dc-toast{position:fixed;left:50%;bottom:28px;transform:translateX(-50%);z-index:40;background:var(--dsw-alias-bg-layer-3);color:var(--dsw-alias-label-primary);border:1px solid var(--dsw-alias-border-l2);border-radius:999px;padding:8px 18px;font-size:13px;box-shadow:var(--dsw-shadow-lv2)}
+    .dc-title{font-size:13px;font-weight:600;color:var(--dsw-alias-label-primary)}
+    .dc-flow{display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:10px 12px;border:1px dashed var(--dsw-alias-border-l2);border-radius:10px}
+    .dc-pill{display:inline-flex;align-items:center;padding:3px 10px;border-radius:999px;background:var(--dsw-alias-bg-layer-2);border:1px solid var(--dsw-alias-border-l2);color:var(--dsw-alias-label-secondary);font-size:11.5px}
+    .dc-pill.hl{color:var(--dsw-alias-state-business-primary);border-color:var(--dsw-alias-state-business-primary)}
+    .dc-arrow{color:var(--dsw-alias-label-tertiary);font-size:12px}
+    .dc-step{display:flex;gap:10px;padding:12px;border:1px solid var(--dsw-alias-border-l2);border-radius:10px;background:var(--dsw-alias-bg-layer-2)}
+    .dc-badge{display:inline-flex;align-items:center;justify-content:center;min-width:22px;height:22px;border-radius:50%;background:var(--dsw-alias-state-business-primary);color:var(--dsw-alias-label-primary-inverted,#fff);font-size:12px;font-weight:600;flex-shrink:0;margin-top:2px}
+    .dc-step-body{display:flex;flex-direction:column;gap:8px;flex:1}
+    .dc-step-title{font-size:13px;color:var(--dsw-alias-label-primary);font-weight:500}
+    .dc-gap{display:flex;flex-direction:column;gap:8px}
     </style>`
 
     // ── Small building blocks ────────────────────────────────────────────────
@@ -225,12 +309,12 @@ window.__ModuleLoader__.load({
       const [toastText, setToastText] = useState(null)
       const [enabled, setEnabled] = useState(true)
       const [prompt, setPrompt] = useState('继续')
-      const [maxAttempts, setMaxAttempts] = useState(3)
+      const [maxAttempts, setMaxAttempts] = useState(50)
       const [cooldownMs, setCooldownMs] = useState(5000)
       const [backoffBaseMs, setBackoffBaseMs] = useState(2000)
       const [backoffMaxMs, setBackoffMaxMs] = useState(30000)
-      const [retryOnError, setRetryOnError] = useState(true)
-      const [retryOnInterrupted, setRetryOnInterrupted] = useState(true)
+      const [rules, setRules] = useState(null)                  // null = 尚未加载
+      const [modelCatalog, setModelCatalog] = useState(null)
       const [notifyOnCap, setNotifyOnCap] = useState(true)
 
       const onToast = (text, ms = 3000) => { setToastText(text); setTimeout(() => setToastText(null), ms) }
@@ -239,16 +323,19 @@ window.__ModuleLoader__.load({
         const s = d && d.settings || {}
         setEnabled(s.enabled !== false)
         if (typeof s.prompt === 'string') setPrompt(s.prompt)
-        setMaxAttempts(num(s.maxAttempts, 3))
+        setMaxAttempts(num(s.maxAttempts, 50))
         setCooldownMs(num(s.cooldownMs, 5000))
         setBackoffBaseMs(num(s.backoffBaseMs, 2000))
         setBackoffMaxMs(num(s.backoffMaxMs, 30000))
-        setRetryOnError(s.retryOnError !== false)
-        setRetryOnInterrupted(s.retryOnInterrupted !== false)
+        setRules(Array.isArray(s.rules) && s.rules.length > 0 ? s.rules : [])
         setNotifyOnCap(s.notifyOnCap !== false)
       }).catch(() => {})
+      const refreshCatalog = () => getJson(API + '/models')
+        .then(d => setModelCatalog(d && Array.isArray(d.providers) && d.providers.length > 0 ? d : null))
+        .catch(() => setModelCatalog(null))
       useEffect(() => {
         refresh()
+        refreshCatalog()
         const timer = setInterval(refresh, 15000)
         if (typeof timer.unref === 'function') timer.unref()
         return () => clearInterval(timer)
@@ -257,9 +344,14 @@ window.__ModuleLoader__.load({
       const doSave = async () => {
         setBusy(true)
         try {
+          const payloadRules = (rules || []).map(r => ({
+            id: r.id || '', when: r.when, action: r.action,
+            provider: r.provider || '', model: r.model || '',
+            maxAttempts: Number(r.maxAttempts) || 0,
+          }))
           const r = await fetch(API + '/settings', {
             method: 'PUT', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ enabled, prompt, maxAttempts, cooldownMs, backoffBaseMs, backoffMaxMs, retryOnError, retryOnInterrupted, notifyOnCap }),
+            body: JSON.stringify({ enabled, prompt, maxAttempts, cooldownMs, backoffBaseMs, backoffMaxMs, rules: payloadRules, notifyOnCap }),
           })
           const d = await r.json().catch(() => ({}))
           if (!r.ok) throw new Error(d.error || 'HTTP ' + r.status)
@@ -274,6 +366,81 @@ window.__ModuleLoader__.load({
         const toggle = (key, label, getter, setter) => h('label', { key, className: 'dc-toggle' + (getter() ? ' on' : '') },
           h('input', { type: 'checkbox', checked: getter(), onChange: e => setter(e.target.checked) }), label)
 
+        // ── 规则编辑 ──
+        const WHEN_KEYS = { 'rate-limit': 'when_rateLimit', quota: 'when_quota', auth: 'when_auth', context: 'when_context', server: 'when_server', transport: 'when_transport', interrupted: 'when_interrupted', any: 'when_any' }
+        const RULE_WHEN_VALUES = ['rate-limit', 'quota', 'auth', 'context', 'server', 'transport', 'interrupted', 'any']
+        const RULE_ACTION_VALUES = ['continue', 'continue-with', 'compact', 'stop']
+        const updateRule = (idx, patch) => setRules(rs => (rs || []).map((r, i2) => i2 === idx ? { ...r, ...patch } : r))
+        const moveRule = (idx, dir) => setRules(rs => {
+          const rs2 = [...(rs || [])]; const j = idx + dir
+          if (j < 0 || j >= rs2.length) return rs2
+          const tmp = rs2[idx]; rs2[idx] = rs2[j]; rs2[j] = tmp
+          return rs2
+        })
+        const removeRule = (idx) => setRules(rs => (rs || []).filter((_, i2) => i2 !== idx))
+        const addRule = () => setRules(rs => [...(rs || []), {
+          id: 'r-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+          when: 'any', action: 'continue', provider: '', model: '', maxAttempts: 0,
+        }])
+
+        // ── provider+model 选择器：一律下拉（实时目录），不提供手填。
+        // 目录缺失时仅显示「沿用当前」与已存值（当前设置），保证受控 select 有匹配项。──
+        const catalog = modelCatalog
+        const modelPickerPair = (providerVal, onProvider, modelVal, onModel) => {
+          const pe = catalog && providerVal ? catalog.providers.find(p => p.id === providerVal) : null
+          const missingProvider = providerVal && !(catalog && catalog.providers.some(p => p.id === providerVal))
+          const missingModel = providerVal && modelVal && !(pe && pe.models.some(m => m.id === modelVal))
+          const pf = h('select', { className: 'dc-input', value: providerVal, style: { width: '100%' },
+              onChange: e => {
+                const v = e.target.value
+                onProvider(v)
+                const np = catalog ? catalog.providers.find(p => p.id === v) : null
+                if (!np || !np.models.some(m => m.id === modelVal)) onModel('')
+              } },
+              h('option', { value: '' }, t('followupUseCurrent') + (catalog && catalog.default && catalog.default.provider ? '（' + catalog.default.provider + '）' : '')),
+              catalog ? catalog.providers.map(p => h('option', { key: p.id, value: p.id }, p.name && p.name !== p.id ? p.name + '（' + p.id + '）' : p.id)) : null,
+              missingProvider ? h('option', { key: '__prov__', value: providerVal }, providerVal + '（' + t('followupCurrentSetting') + '）') : null)
+          const mf = h('select', { className: 'dc-input', value: providerVal ? modelVal : '', disabled: !providerVal, style: { width: '100%' },
+              onChange: e => onModel(e.target.value) },
+              !providerVal
+                ? h('option', { value: '' }, t('followupUseCurrent') + (catalog && catalog.default && catalog.default.model ? '（' + catalog.default.model + '）' : ''))
+                : [h('option', { key: '__keep__', value: '' }, t('followupUseCurrent')),
+                   pe ? pe.models.map(m => h('option', { key: m.id, value: m.id }, m.name && m.name !== m.id ? m.name + '（' + m.id + '）' : m.id)) : null,
+                   missingModel ? h('option', { key: '__custom__', value: modelVal }, modelVal + '（' + t('followupCurrentSetting') + '）') : null])
+          return { pf, mf }
+        }
+        const ruleRow = (rule, i, total) => {
+          const picker = modelPickerPair(rule.provider || '', v => updateRule(i, { provider: v }), rule.model || '', v => updateRule(i, { model: v }))
+          return h('div', { key: rule.id || i, className: 'dc-step' },
+            h('span', { className: 'dc-badge' }, String(i + 1)),
+            h('div', { className: 'dc-step-body' },
+              h('div', { className: 'dc-row' },
+                h('div', { className: 'dc-field' },
+                  h('label', { className: 'dc-dir' }, t('ruleWhen')),
+                  h('select', { className: 'dc-input', value: rule.when, onChange: e => updateRule(i, { when: e.target.value }) },
+                    RULE_WHEN_VALUES.map(w => h('option', { key: w, value: w }, t(WHEN_KEYS[w]))))),
+                h('div', { className: 'dc-field' },
+                  h('label', { className: 'dc-dir' }, t('ruleAction')),
+                  h('select', { className: 'dc-input', value: rule.action, onChange: e => updateRule(i, { action: e.target.value }) },
+                    RULE_ACTION_VALUES.map(a => h('option', { key: a, value: a }, t('act_' + a))))),
+                h('div', { className: 'dc-field' },
+                  h('label', { className: 'dc-dir' }, t('ruleMaxAttempts')),
+                  h('input', { className: 'dc-input', type: 'number', min: 0, value: rule.maxAttempts || 0, onChange: e => updateRule(i, { maxAttempts: Math.max(0, num(e.target.value, 0)) }), style: { width: 110 } }))),
+              rule.action === 'continue-with'
+                ? h('div', { className: 'dc-row' },
+                    h('div', { className: 'dc-field', style: { flex: 1, minWidth: 200 } },
+                      h('label', { className: 'dc-dir' }, t('fallbackProviderLabel')),
+                      picker.pf),
+                    h('div', { className: 'dc-field', style: { flex: 1, minWidth: 200 } },
+                      h('label', { className: 'dc-dir' }, t('fallbackModelLabel')),
+                      picker.mf))
+                : null,
+              h('div', { className: 'dc-toolbar' },
+                h('button', { className: 'dc-btn', onClick: () => moveRule(i, -1), disabled: i === 0, title: t('ruleUp') }, '↑'),
+                h('button', { className: 'dc-btn', onClick: () => moveRule(i, 1), disabled: i === total - 1, title: t('ruleDown') }, '↓'),
+                h('button', { className: 'dc-btn', onClick: () => removeRule(i), title: t('ruleRemove') }, '✕'))))
+        }
+
         body = status === null
           ? h('div', { style: { display: 'flex', alignItems: 'center', gap: 10, padding: 24, color: 'var(--dsw-alias-label-secondary)' } },
               h('div', { className: 'dc-spin' }), t('loading'))
@@ -283,20 +450,35 @@ window.__ModuleLoader__.load({
                 h('span', { className: 'dc-spacer' }),
                 !status.armed && h(Tag, null, t('notConfigured'))),
               h('div', { className: 'dc-hint' }, t('hint')),
+              // ── 卡1：基础 ──
               h('div', { className: 'dc-card' },
+                h('div', { className: 'dc-title' }, t('secBasics')),
                 toggle('enabled', t('enabled'), () => enabled, setEnabled),
                 h('div', { className: 'dc-field' },
                   h('label', { className: 'dc-dir' }, t('promptLabel')),
                   h('input', { className: 'dc-input', value: prompt, onChange: e => setPrompt(e.target.value), style: { width: '100%' } }),
-                  h('div', { className: 'dc-dir' }, t('promptHint'))),
+                  h('div', { className: 'dc-dir' }, t('promptHint')))),
+              // ── 卡2：有序规则表（先命中先用） ──
+              h('div', { className: 'dc-card' },
+                h('div', { className: 'dc-title' }, t('secRules')),
+                h('div', { className: 'dc-dir' }, t('rulesHint')),
+                !rules || rules.length === 0
+                  ? h('div', { className: 'dc-hint' }, t('noRules'))
+                  : rules.map((rule, i) => ruleRow(rule, i, rules.length)),
+                h('div', { className: 'dc-toolbar' },
+                  h(ButtonLite, { small: true, onClick: addRule }, '+ ' + t('addRule')))),
+              // ── 卡3：护栏 ──
+              h('div', { className: 'dc-card' },
+                h('div', { className: 'dc-title' }, t('secGuards')),
                 h('div', { className: 'dc-row' },
                   h('div', { className: 'dc-field' },
                     h('label', { className: 'dc-dir' }, t('maxAttemptsLabel')),
-                    h('input', { className: 'dc-input', type: 'number', min: 1, value: maxAttempts, onChange: e => setMaxAttempts(Math.max(1, num(e.target.value, 3))), style: { width: 120 } })),
+                    h('input', { className: 'dc-input', type: 'number', min: 1, value: maxAttempts, onChange: e => setMaxAttempts(Math.max(1, num(e.target.value, 50))), style: { width: 120 } })),
+                  toggle('notifyOnCap', t('notifyOnCap'), () => notifyOnCap, setNotifyOnCap)),
+                h('div', { className: 'dc-row' },
                   h('div', { className: 'dc-field' },
                     h('label', { className: 'dc-dir' }, t('cooldownLabel')),
-                    h('input', { className: 'dc-input', type: 'number', min: 0, value: cooldownMs, onChange: e => setCooldownMs(Math.max(0, num(e.target.value, 5000))), style: { width: 120 } }))),
-                h('div', { className: 'dc-row' },
+                    h('input', { className: 'dc-input', type: 'number', min: 0, value: cooldownMs, onChange: e => setCooldownMs(Math.max(0, num(e.target.value, 5000))), style: { width: 120 } })),
                   h('div', { className: 'dc-field' },
                     h('label', { className: 'dc-dir' }, t('backoffBaseLabel')),
                     h('input', { className: 'dc-input', type: 'number', min: 0, value: backoffBaseMs, onChange: e => setBackoffBaseMs(Math.max(0, num(e.target.value, 2000))), style: { width: 120 } })),
@@ -304,10 +486,6 @@ window.__ModuleLoader__.load({
                     h('label', { className: 'dc-dir' }, t('backoffMaxLabel')),
                     h('input', { className: 'dc-input', type: 'number', min: 1000, value: backoffMaxMs, onChange: e => setBackoffMaxMs(Math.max(1000, num(e.target.value, 30000))), style: { width: 120 } }))),
                 h('div', { className: 'dc-dir' }, t('backoffHint')),
-                h('div', { className: 'dc-toggles' },
-                  toggle('retryOnError', t('retryOnError'), () => retryOnError, setRetryOnError),
-                  toggle('retryOnInterrupted', t('retryOnInterrupted'), () => retryOnInterrupted, setRetryOnInterrupted),
-                  toggle('notifyOnCap', t('notifyOnCap'), () => notifyOnCap, setNotifyOnCap)),
                 h('div', { className: 'dc-dir' }, t('maxAttemptsHint'))),
               // ── Session counters ──
               h('div', { className: 'dc-card' },
