@@ -1,7 +1,7 @@
 {
   "name": "@weibaohui/dsh-continue",
   "version": "0.2.5",
-  "description": "DeepSeek Harness plugin: auto-resume interrupted agent runs. 有序规则表驱动——按失败类型（限流/额度/鉴权/上下文超限/5xx/传输错误/崩溃孤儿）路由：继续续跑、换模型继续、压缩后继续（ctx.compaction）或停止并通知。",
+  "description": "dsh 插件 · 自动续跑：agent 会话中断后自动帮你续上，不用手敲「继续」。有序规则表按失败类型（限流/额度/鉴权/上下文超限/崩溃孤儿）路由——自动退避重试、换模型继续、压缩上下文后继续或止损通知，规则可视化编辑，全程活动日志。",
   "license": "MIT",
   "keywords": [
     "dsh",
