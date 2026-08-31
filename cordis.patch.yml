@@ -11,7 +11,7 @@
 
 - insert:
     - id: dsh-continue
-      name: 'dsh-plugin-dsh-continue'
+      name: '@weibaohui/dsh-continue'
 
 # 本插件的 compact 规则动作依赖 ctx.compaction（CompactionEngine）。web bundle
 # 把 compaction-basic 标成了 disabled: true，而插件静态注入了 'compaction'
