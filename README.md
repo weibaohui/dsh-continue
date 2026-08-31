@@ -1,6 +1,6 @@
 # @weibaohui/dsh-continue
 
-[![DSH plugin](https://img.shields.io/badge/dsh-plugin-✅-green)](https://github.com/topics/dsh-plugin)
+[![DSH plugin](https://img.shields.io/badge/dsh-plugin-green)](https://github.com/topics/dsh-plugin)
 [![npm version](https://img.shields.io/npm/v/@weibaohui/dsh-continue)](https://www.npmjs.com/package/@weibaohui/dsh-continue)
 
 **自动续跑插件**：agent 会话中断后自动帮你续上，不用手敲「继续」。
