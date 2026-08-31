@@ -128,7 +128,7 @@ window.__ModuleLoader__.load({
       lastCol: '上次续跑',
       pendingCol: '挂起',
       noSessions: '暂无被追踪的会话',
-      activityTitle: '活动日志（尾部）',
+      activityTitle: '活动日志',
       noActivity: '暂无活动',
       loading: '…',
       now: '刚刚',
