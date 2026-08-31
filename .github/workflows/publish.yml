@@ -1,19 +1,23 @@
 name: publish
 
-# 打 v* tag（或手动触发）→ 校验 + 测试 → 发布 npm → 建 GitHub Release。
-# 本地流程：npm version patch && git push --follow-tags
+# 通过 GitHub Release 发布 npm：创建 Release（published）→ 校验 + 测试 → npm publish。
+# 打 tag 不会触发发布；release 的 tag 必须与 package.json version 一致。
+#
+# 发版流程：
+#   npm version patch          # bump + commit + tag
+#   git push --follow-tags
+#   gh release create vX.Y.Z --generate-notes   # 或网页 Create release → 触发本 workflow
 #
 # 发布走 npm Trusted Publishing（npmjs 包设置里绑定了本仓库 + 本 workflow）：
 # OIDC 身份直发，无需 NPM_TOKEN secret。
 
 on:
-  push:
-    tags:
-      - 'v*'
+  release:
+    types: [published]
   workflow_dispatch:
 
 permissions:
-  contents: write # 建 GitHub Release
+  contents: read
   id-token: write # npm provenance / trusted publishing
 
 concurrency:
@@ -31,6 +35,16 @@ jobs:
           node-version: 22
           registry-url: https://registry.npmjs.org
           cache: npm
+
+      - name: Release tag must match package.json version
+        if: github.event_name == 'release'
+        run: |
+          PKG="v$(node -p "require('./package.json').version")"
+          if [ "$PKG" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::Release tag ($GITHUB_REF_NAME) 与 package.json version ($PKG) 不一致"
+            exit 1
+          fi
+          echo "tag = version = $GITHUB_REF_NAME ✓"
 
       - name: Install
         run: npm ci
@@ -55,9 +69,3 @@ jobs:
       - name: Publish to npm
         if: steps.check.outputs.skip != 'true'
         run: npm publish --provenance --access public
-
-      - name: GitHub Release
-        if: startsWith(github.ref, 'refs/tags/v') && steps.check.outputs.skip != 'true'
-        run: gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --generate-notes
-        env:
-          GH_TOKEN: ${{ github.token }}

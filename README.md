@@ -17,6 +17,17 @@ dsh plugin --profile web add github:weibaohui/dsh-continue -w
 
 装完重启 `dsh web` 即生效——默认规则表开箱可用（限流退避续跑×5｜额度/鉴权停止｜上下文超限压缩后继续×2｜崩溃孤儿继续｜任意兜底继续），设置页可改。
 
+## 发版（维护者）
+
+```bash
+npm version patch            # bump + commit + tag
+git push --follow-tags
+gh release create vX.Y.Z --generate-notes   # 创建 Release 触发自动发布到 npm
+```
+
+发布由 GitHub Actions 完成（Release published 触发；打 tag 不发布），走 npm Trusted Publishing 免 token。
+
+
 > 注意：插件 bundle patch 会同时重新启用宿主的 `compaction-basic`（web bundle 默认禁用它），compact 规则动作依赖它。
 
 ## 设计要点
