@@ -66,6 +66,9 @@ jobs:
             echo "skip=false" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Ensure npm supports Trusted Publishing (>= 11.5.1)
+        run: npm install -g npm@latest
+
       - name: Publish to npm
         if: steps.check.outputs.skip != 'true'
         run: npm publish --provenance --access public
