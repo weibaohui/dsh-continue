@@ -526,7 +526,7 @@ function SettingsSlotComponent(props) {
 
 // ── Plugin plane contract ────────────────────────────────────────────────
 
-const CLIENT_NAME = 'dsh-plugin-dsh-continue'
+const CLIENT_NAME = '@weibaohui/dsh-continue'
 
 module.exports = {
   name: CLIENT_NAME,
