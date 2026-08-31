@@ -1,6 +1,23 @@
-# dsh-plugin-dsh-continue
+# @weibaohui/dsh-continue
+
+[![DSH plugin](https://img.shields.io/badge/dsh-plugin-✅-green)](https://github.com/topics/dsh-plugin)
+[![npm version](https://img.shields.io/npm/v/@weibaohui/dsh-continue)](https://www.npmjs.com/package/@weibaohui/dsh-continue)
 
 agent 会话的某一轮以**传输/连接错误**收尾（`turn/end` reason=`error`）、或被持久化后端关成**崩溃孤儿**（`interrupted`）、或工具调用中途断无结果时，本插件自动向**同一 session** 再投一次配置好的 prompt（默认 `继续`）续跑——免去你每次手敲「继续」。
+
+## 安装
+
+```bash
+# npm 包（推荐，带 semver）
+dsh plugin --profile web add @weibaohui/dsh-continue -w
+
+# 或从 GitHub 安装
+dsh plugin --profile web add github:weibaohui/dsh-continue -w
+```
+
+装完重启 `dsh web` 即生效——默认规则表开箱可用（限流退避续跑×5｜额度/鉴权停止｜上下文超限压缩后继续×2｜崩溃孤儿继续｜任意兜底继续），设置页可改。
+
+> 注意：插件 bundle patch 会同时重新启用宿主的 `compaction-basic`（web bundle 默认禁用它），compact 规则动作依赖它。
 
 ## 设计要点
 
