@@ -33,3 +33,7 @@ dsh plugin --profile web add @weibaohui/dsh-continue -w
 2. 总开关默认开启，默认规则表已覆盖常见失败场景
 3. 想自定义：编辑规则表（匹配条件 + 动作）、调整续跑上限/退避参数、选备用模型
 4. 失败发生时插件自动介入；会话里会收到续跑与停止原因的通知，活动日志在设置页可查
+
+## 联系我 :飞书群
+
+![link](https://foruda.gitee.com/images/1774880015525784725/4fd67005_77493.png "link")
