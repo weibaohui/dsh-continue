@@ -62,6 +62,7 @@ const ZH = {
   notArmed: '未就绪',
   secBasics: '基础',
   secRules: '续跑规则（从上到下匹配，先命中先用）',
+  secGuards: '护栏（冷却/退避/上限）',
   rulesHint: '每条规则 = 匹配条件 + 动作。某轮失败时从上往下找第一条命中的规则执行；该规则设了次数上限且用尽后，自动继续往下找。所有规则都不适用时按达到全局上限处理。',
   ruleWhen: '匹配条件',
   ruleAction: '动作',
@@ -78,7 +79,10 @@ const ZH = {
   when_server: '服务端错误（5xx）',
   when_transport: '传输 / 网络错误',
   when_interrupted: '崩溃孤儿轮',
+  when_status: '自定义状态码',
   when_any: '任意失败（兜底）',
+  ruleCodesLabel: '状态码列表',
+  ruleCodesHint: '逗号/空格分隔；数字匹配 HTTP 状态码（如 529），文字匹配机器码（如 UNKNOWN），大小写不敏感',
   act_continue: '继续续跑',
   'act_continue-with': '换模型继续',
   act_compact: '压缩后继续（先压缩上下文，成功再续跑）',
@@ -91,7 +95,7 @@ const ZH = {
   cooldownLabel: '冷却（毫秒）',
   backoffBaseLabel: '退避基数（毫秒）',
   backoffMaxLabel: '退避上限（毫秒）',
-  backoffHint: '每次续跑前等待 base * 2^attempt，上限封顶',
+  backoffHint: '每次续跑前等待「退避基数 × 2^已续跑次数」毫秒，最高不超过退避上限',
   retryOnError: '传输错误时续跑',
   retryOnInterrupted: '崩溃孤儿轮时续跑',
   retryOnRateLimit: '限流（429）时续跑',
@@ -132,6 +136,7 @@ const EN = {
   notArmed: 'not armed',
   secBasics: 'Basics',
   secRules: 'Continue rules (matched top-down; first hit wins)',
+  secGuards: 'Guardrails (cooldown / backoff / cap)',
   rulesHint: 'Each rule = a match condition + an action. On a failed turn the engine walks the list and runs the first rule that matches and is not exhausted (its own attempt cap, if set). When nothing applies, the global cap handling kicks in.',
   ruleWhen: 'Match condition',
   ruleAction: 'Action',
@@ -148,7 +153,10 @@ const EN = {
   when_server: 'Server error (5xx)',
   when_transport: 'Transport / network error',
   when_interrupted: 'Crash-orphan turn',
+  when_status: 'Custom status codes',
   when_any: 'Any failure (fallback)',
+  ruleCodesLabel: 'Status codes',
+  ruleCodesHint: 'Comma/space separated; numbers match HTTP status (e.g. 529), words match machine codes (e.g. UNKNOWN), case-insensitive',
   act_continue: 'Continue (current model)',
   'act_continue-with': 'Continue with another model',
   act_compact: 'Compact then continue',
@@ -338,6 +346,7 @@ function SettingsSection({ t }) {
         id: r.id || '', when: r.when, action: r.action,
         provider: r.provider || '', model: r.model || '',
         maxAttempts: Number(r.maxAttempts) || 0,
+        codes: r.codes || '',
       }))
       const r = await fetch(API + '/settings', {
         method: 'PUT', headers: { 'Content-Type': 'application/json' },
@@ -357,8 +366,8 @@ function SettingsSection({ t }) {
       h('input', { type: 'checkbox', checked: getter(), onChange: e => setter(e.target.checked) }), label)
 
     // ── 规则编辑 ──
-    const WHEN_KEYS = { 'rate-limit': 'when_rateLimit', quota: 'when_quota', auth: 'when_auth', context: 'when_context', server: 'when_server', transport: 'when_transport', interrupted: 'when_interrupted', any: 'when_any' }
-    const RULE_WHEN_VALUES = ['rate-limit', 'quota', 'auth', 'context', 'server', 'transport', 'interrupted', 'any']
+    const WHEN_KEYS = { 'rate-limit': 'when_rateLimit', quota: 'when_quota', auth: 'when_auth', context: 'when_context', server: 'when_server', transport: 'when_transport', interrupted: 'when_interrupted', status: 'when_status', any: 'when_any' }
+    const RULE_WHEN_VALUES = ['rate-limit', 'quota', 'auth', 'context', 'server', 'transport', 'interrupted', 'status', 'any']
     const RULE_ACTION_VALUES = ['continue', 'continue-with', 'compact', 'stop']
     const updateRule = (idx, patch) => setRules(rs => (rs || []).map((r, i2) => i2 === idx ? { ...r, ...patch } : r))
     const moveRule = (idx, dir) => setRules(rs => {
@@ -416,6 +425,14 @@ function SettingsSection({ t }) {
             h('div', { className: 'dc-field' },
               h('label', { className: 'dc-dir' }, t('ruleMaxAttempts')),
               h('input', { className: 'dc-input', type: 'number', min: 0, value: rule.maxAttempts || 0, onChange: e => updateRule(i, { maxAttempts: Math.max(0, num(e.target.value, 0)) }), style: { width: 110 } }))),
+          rule.when === 'status'
+            ? h('div', { className: 'dc-row' },
+                h('div', { className: 'dc-field', style: { flex: 1, minWidth: 220 } },
+                  h('label', { className: 'dc-dir' }, t('ruleCodesLabel')),
+                  h('input', { className: 'dc-input', value: rule.codes || '', placeholder: '529, 520, UNKNOWN',
+                    onChange: e => updateRule(i, { codes: e.target.value }), style: { width: '100%' } }),
+                  h('div', { className: 'dc-dir' }, t('ruleCodesHint'))))
+            : null,
           rule.action === 'continue-with'
             ? h('div', { className: 'dc-row' },
                 h('div', { className: 'dc-field', style: { flex: 1, minWidth: 200 } },
