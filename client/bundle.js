@@ -89,7 +89,10 @@ window.__ModuleLoader__.load({
       when_server: '服务端错误（5xx）',
       when_transport: '传输 / 网络错误',
       when_interrupted: '崩溃孤儿轮',
+      when_status: '自定义状态码',
       when_any: '任意失败（兜底）',
+      ruleCodesLabel: '状态码列表',
+      ruleCodesHint: '逗号/空格分隔；数字匹配 HTTP 状态码（如 529），文字匹配机器码（如 UNKNOWN），大小写不敏感',
       act_continue: '继续续跑',
       'act_continue-with': '换模型继续',
       act_compact: '压缩后继续（先压缩上下文，成功再续跑）',
@@ -160,7 +163,10 @@ window.__ModuleLoader__.load({
       when_server: 'Server error (5xx)',
       when_transport: 'Transport / network error',
       when_interrupted: 'Crash-orphan turn',
+      when_status: 'Custom status codes',
       when_any: 'Any failure (fallback)',
+      ruleCodesLabel: 'Status codes',
+      ruleCodesHint: 'Comma/space separated; numbers match HTTP status (e.g. 529), words match machine codes (e.g. UNKNOWN), case-insensitive',
       act_continue: 'Continue (current model)',
       'act_continue-with': 'Continue with another model',
       act_compact: 'Compact then continue',
@@ -350,6 +356,7 @@ window.__ModuleLoader__.load({
             id: r.id || '', when: r.when, action: r.action,
             provider: r.provider || '', model: r.model || '',
             maxAttempts: Number(r.maxAttempts) || 0,
+            codes: r.codes || '',
           }))
           const r = await fetch(API + '/settings', {
             method: 'PUT', headers: { 'Content-Type': 'application/json' },
@@ -369,8 +376,8 @@ window.__ModuleLoader__.load({
           h('input', { type: 'checkbox', checked: getter(), onChange: e => setter(e.target.checked) }), label)
 
         // ── 规则编辑 ──
-        const WHEN_KEYS = { 'rate-limit': 'when_rateLimit', quota: 'when_quota', auth: 'when_auth', context: 'when_context', server: 'when_server', transport: 'when_transport', interrupted: 'when_interrupted', any: 'when_any' }
-        const RULE_WHEN_VALUES = ['rate-limit', 'quota', 'auth', 'context', 'server', 'transport', 'interrupted', 'any']
+        const WHEN_KEYS = { 'rate-limit': 'when_rateLimit', quota: 'when_quota', auth: 'when_auth', context: 'when_context', server: 'when_server', transport: 'when_transport', interrupted: 'when_interrupted', status: 'when_status', any: 'when_any' }
+        const RULE_WHEN_VALUES = ['rate-limit', 'quota', 'auth', 'context', 'server', 'transport', 'interrupted', 'status', 'any']
         const RULE_ACTION_VALUES = ['continue', 'continue-with', 'compact', 'stop']
         const updateRule = (idx, patch) => setRules(rs => (rs || []).map((r, i2) => i2 === idx ? { ...r, ...patch } : r))
         const moveRule = (idx, dir) => setRules(rs => {
@@ -428,6 +435,14 @@ window.__ModuleLoader__.load({
                 h('div', { className: 'dc-field' },
                   h('label', { className: 'dc-dir' }, t('ruleMaxAttempts')),
                   h('input', { className: 'dc-input', type: 'number', min: 0, value: rule.maxAttempts || 0, onChange: e => updateRule(i, { maxAttempts: Math.max(0, num(e.target.value, 0)) }), style: { width: 110 } }))),
+              rule.when === 'status'
+                ? h('div', { className: 'dc-row' },
+                    h('div', { className: 'dc-field', style: { flex: 1, minWidth: 220 } },
+                      h('label', { className: 'dc-dir' }, t('ruleCodesLabel')),
+                      h('input', { className: 'dc-input', value: rule.codes || '', placeholder: '529, 520, UNKNOWN',
+                        onChange: e => updateRule(i, { codes: e.target.value }), style: { width: '100%' } }),
+                      h('div', { className: 'dc-dir' }, t('ruleCodesHint'))))
+                : null,
               rule.action === 'continue-with'
                 ? h('div', { className: 'dc-row' },
                     h('div', { className: 'dc-field', style: { flex: 1, minWidth: 200 } },

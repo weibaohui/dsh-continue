@@ -273,3 +273,58 @@ test('sanitizeRule: compact accepted; DEFAULT_RULES context row uses compact', (
   assert.equal(DEFAULT_RULES[3].action, 'compact')
   assert.equal(DEFAULT_RULES[3].maxAttempts, 2)
 })
+
+// ── 自定义状态码规则（when=status）────────────────────────────────────────
+
+test('parseCodes: mixed numbers/words, cn separators, out-of-range digits dropped, empty → null', () => {
+  const { parseCodes } = I
+  assert.deepEqual(parseCodes('529, 520，UNKNOWN;e_conn_reset'), { nums: [529, 520], strs: ['UNKNOWN', 'E_CONN_RESET'] })
+  assert.equal(parseCodes('99 999'), null) // 纯数字但越界（<100 / >599）→ 丢弃
+  assert.equal(parseCodes(''), null)
+  assert.equal(parseCodes(' , ，'), null)
+  assert.equal(parseCodes(undefined), null)
+  assert.equal(parseCodes(42), null)
+})
+
+test('matchesCodes: HTTP status hit, machine-code hit case-insensitive, miss, no failure', () => {
+  const { matchesCodes } = I
+  assert.equal(matchesCodes('529', { status: 529, code: 'UNKNOWN' }), true)
+  assert.equal(matchesCodes('unknown', { status: 503, code: 'UNKNOWN' }), true) // 大小写不敏感
+  assert.equal(matchesCodes('529, QUOTA', { status: 402, code: 'QUOTA' }), true)
+  assert.equal(matchesCodes('529', { status: 500, code: 'X' }), false)
+  assert.equal(matchesCodes('529', { code: 'UNKNOWN' }), false) // 无 status 不硬凑
+  assert.equal(matchesCodes('529', undefined), false)
+  assert.equal(matchesCodes('', { status: 529, code: 'X' }), false)
+})
+
+test('sanitizeRule: status rule needs parseable codes; codes round-trip; non-status rules keep codes field', () => {
+  assert.equal(sanitizeRule({ when: 'status', action: 'continue', codes: '  ' }), null)
+  assert.equal(sanitizeRule({ when: 'status', action: 'continue', codes: '999' }), null)
+  const ok = sanitizeRule({ when: 'status', action: 'continue', codes: ' 529, 520 ' })
+  assert.equal(ok.codes, '529, 520')
+  const plain = sanitizeRule({ when: 'quota', action: 'stop' })
+  assert.equal(plain.codes, '')
+})
+
+test('firstMatchingRule: custom status rule beats later built-ins; skipped for interrupted; exhausted falls through', () => {
+  const rules = [
+    { id: 's', when: 'status', action: 'continue', codes: '529', maxAttempts: 1 },
+    { id: 'sv', when: 'server', action: 'continue', maxAttempts: 0 },
+    { id: 'any', when: 'any', action: 'continue', maxAttempts: 0 },
+  ]
+  const f529 = { status: 529, code: 'UNKNOWN' }
+  assert.equal(firstMatchingRule(rules, 'error', { cls: 'server' }, {}, f529).id, 's')
+  assert.equal(firstMatchingRule(rules, 'error', { cls: 'server' }, { s: 1 }, f529).id, 'sv') // s 用尽 → 落到 server
+  assert.equal(firstMatchingRule(rules, 'interrupted', { cls: undefined }, {}, undefined).id, 'any') // 孤儿轮无 failure
+})
+
+test('decideTurnEnd: custom status rule routes and carries its action payload', () => {
+  const e = eff({ rules: [{ id: 's529', when: 'status', action: 'continue-with', provider: 'p9', model: 'm9', codes: '529, UNKNOWN', maxAttempts: 3 }] })
+  const a = decideTurnEnd(newSessionState(), 'error', e, 1000, { code: 'UNKNOWN', status: 529, message: 'cloudflare' })
+  assert.equal(a.type, 'schedule')
+  assert.equal(a.rule.id, 's529')
+  assert.deepEqual(a.override, { provider: 'p9', model: 'm9', via: 's529' })
+  // 状态码不在列表内 → 无规则可用 → cap
+  const b = decideTurnEnd(newSessionState(), 'error', e, 1000, { code: 'QUOTA', status: 402, message: 'x' })
+  assert.equal(b.type, 'cap')
+})

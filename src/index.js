@@ -54,11 +54,11 @@ const PERSESSION_TAIL = 20
 // （maxAttempts>0 且该规则本簇尝试次数达标）后自动跳到下一条。
 // when：rate-limit（429/限流）| quota（额度耗尽）| auth（鉴权失败）|
 //       context（上下文超限）| server（5xx）| transport（传输/网络错误）|
-//       interrupted（崩溃孤儿轮）| any（任意兜底）
+//       interrupted（崩溃孤儿轮）| status（自定义状态码，见 parseCodes）| any（任意兜底）
 // action：continue（按原模型继续）| continue-with（换到指定 provider/model 继续）|
 //         compact（压缩上下文后继续；无可压缩区间/压缩失败则停止并通知）|
 //         stop（停止自动续跑并通知会话）
-const RULE_WHENS = ['rate-limit', 'quota', 'auth', 'context', 'server', 'transport', 'interrupted', 'any']
+const RULE_WHENS = ['rate-limit', 'quota', 'auth', 'context', 'server', 'transport', 'interrupted', 'status', 'any']
 const RULE_ACTIONS = ['continue', 'continue-with', 'compact', 'stop']
 const WHEN_LABELS = {
   'rate-limit': '限流（429）',
@@ -68,6 +68,7 @@ const WHEN_LABELS = {
   server: '服务端错误（5xx）',
   transport: '传输/网络错误',
   interrupted: '崩溃孤儿轮',
+  status: '自定义状态码',
   any: '任意失败',
 }
 
@@ -191,13 +192,18 @@ function classToWhen(kind, cls) {
 /**
  * First matching, not-yet-exhausted rule (array order = priority; first match
  * wins). A rule is exhausted when maxAttempts > 0 and this cluster already used
- * that many continues under it. Pure; unit-tested via __internals.
+ * that many continues under it. `when: 'status'` rules carry a user-defined
+ * `codes` list and only ever match kind=error turns (a crash-orphan turn has no
+ * structured failure to match against). Pure; unit-tested via __internals.
  */
-function firstMatchingRule(rules, kind, cls, ruleAttempts) {
+function firstMatchingRule(rules, kind, cls, ruleAttempts, failure) {
   const when = classToWhen(kind, cls)
   if (!when) return null
   for (const rule of rules || []) {
-    if (!rule || (rule.when !== when && rule.when !== 'any')) continue
+    if (!rule) continue
+    if (rule.when === 'status') {
+      if (kind !== 'error' || !matchesCodes(rule.codes, failure)) continue
+    } else if (rule.when !== when && rule.when !== 'any') continue
     const cap = Number(rule.maxAttempts) || 0
     if (cap > 0 && (ruleAttempts && ruleAttempts[rule.id] || 0) >= cap) continue
     return rule
@@ -236,6 +242,39 @@ function classifyFailure(failure) {
   if (code === 'RATE_LIMIT' || status === 429) return { cls: 'rate-limit', status, code }
   if (status !== undefined && status >= 500) return { cls: 'server', status, code }
   return { cls: 'unknown', status, code }
+}
+
+// ── 自定义状态码（when=status）───────────────────────────────────────────
+// codes 字段是用户自由填写的字符串：'529, 520，UNKNOWN'。解析规则：
+// 纯数字且在 100..599 → HTTP 状态码（匹配 failure.status）；含非数字字符 →
+// 机器码字符串（匹配 failure.code，归一成大写做不敏感比较）；越界纯数字丢弃。
+// 上限 20 个 token、单个 64 字符。无可用地码返回 null。
+
+/** Parse a rule `codes` string into `{ nums, strs }`; null when nothing usable. Pure. */
+function parseCodes(raw) {
+  if (typeof raw !== 'string') return null
+  const nums = [], strs = []
+  for (const token of raw.split(/[,，;；\s]+/)) {
+    if (!token || token.length > 64) continue
+    if (/^\d{1,3}$/.test(token)) {
+      const n = Number(token)
+      if (n >= 100 && n <= 599) nums.push(n)
+      continue
+    }
+    strs.push(token.toUpperCase())
+    if (nums.length + strs.length >= 20) break
+  }
+  return nums.length > 0 || strs.length > 0 ? { nums, strs } : null
+}
+
+/** Does one structured LlmFailure hit a rule's `codes` list? Pure; tolerant of absent fields. */
+function matchesCodes(raw, failure) {
+  if (!failure || typeof failure !== 'object') return false
+  const parsed = parseCodes(raw)
+  if (!parsed) return false
+  if (parsed.nums.length > 0 && Number.isFinite(failure.status) && parsed.nums.includes(failure.status)) return true
+  if (parsed.strs.length > 0 && typeof failure.code === 'string' && parsed.strs.includes(failure.code.toUpperCase())) return true
+  return false
 }
 
 /** Human-readable one-liner for a rule-driven stop (or classified failure). */
@@ -307,7 +346,7 @@ function decideTurnEnd(st, kind, eff, now, failure) {
   if (kind !== 'error' && kind !== 'interrupted') return { type: 'skip', reason: 'reason-not-retryable', kind }
   if (st.compacting) return { type: 'skip', reason: 'compacting' }
   const cls = kind === 'error' ? classifyFailure(failure) : { cls: undefined, status: undefined, code: undefined }
-  const rule = firstMatchingRule(eff.rules, kind, cls, st.ruleAttempts)
+  const rule = firstMatchingRule(eff.rules, kind, cls, st.ruleAttempts, failure)
   if (!rule) return { type: 'cap' } // 没有可用规则（全部用尽或表为空）→ 视作达上限
   if (rule.action === 'stop') return { type: 'abort-notify', cls, rule }
   // continue / continue-with / compact
@@ -331,6 +370,8 @@ function sanitizeRule(entry, i) {
   const action = RULE_ACTIONS.includes(entry.action) ? entry.action : null
   if (!when || !action) return null
   const id = typeof entry.id === 'string' && entry.id !== '' ? entry.id.slice(0, 64) : `r-${i}-${Date.now().toString(36)}`
+  const codes = typeof entry.codes === 'string' ? entry.codes.trim().slice(0, 512) : ''
+  if (when === 'status' && !parseCodes(codes)) return null // 自定义状态码规则必须至少给出一个可解析的码
   const rule = {
     id,
     when,
@@ -338,6 +379,7 @@ function sanitizeRule(entry, i) {
     provider: typeof entry.provider === 'string' ? entry.provider.trim() : '',
     model: typeof entry.model === 'string' ? entry.model.trim() : '',
     maxAttempts: Number.isFinite(entry.maxAttempts) && entry.maxAttempts > 0 ? Math.floor(entry.maxAttempts) : 0,
+    codes,
   }
   if (rule.action === 'continue-with' && !rule.model) return null // 换模型必须有目标模型
   return rule
@@ -377,6 +419,7 @@ function settingsSchema() {
       provider: Schema.string().default(''),
       model: Schema.string().default(''),
       maxAttempts: Schema.number().default(0),
+      codes: Schema.string().default(''),
     })).default(DEFAULT_RULES),
     notifyOnCap: Schema.boolean().default(true),
   })
@@ -388,6 +431,7 @@ module.exports = {
   __internals: {
     reasonKind, computeBackoff, withinCooldown, isExcluded,
     decideTurnEnd, classifyFailure, failureNoticeText, firstMatchingRule, classToWhen,
+    parseCodes, matchesCodes,
     sanitizeRule, sanitizePatch, newSessionState, readActivityTail,
     DEFAULTS, DEFAULT_RULES, RULE_WHENS, RULE_ACTIONS, dshHome, EXCLUDE_ID_PREFIXES, settingsSchema,
   },
