@@ -427,7 +427,7 @@ function settingsSchema() {
 
 module.exports = {
   name: 'dsh-continue',
-  inject: ['agents', 'settings', 'webServer', 'llm', 'agentDefaultModel', 'compaction'],
+  inject: ['agents', 'settings', 'webServer', 'llm', 'agentDefaultModel', 'compaction', 'connection'],
   __internals: {
     reasonKind, computeBackoff, withinCooldown, isExcluded,
     decideTurnEnd, classifyFailure, failureNoticeText, firstMatchingRule, classToWhen,
@@ -715,6 +715,14 @@ module.exports = {
       kind: 'prefix',
       path: '/dsh-continue/api',
       handler: async (req, res) => {
+    // 与其它 host 路由一致的信任栅栏：connection 服务的 Host/Origin 检查
+    // 加浏览器认证，防止本机任意网页跨站调用。
+    const rejection = ctx.connection.requestRejection(req)
+    if (rejection !== undefined) {
+      res.writeHead(rejection)
+      res.end()
+      return
+    }
         try {
           const url = new URL(req.url || '/', 'http://dsh.local')
           const apiPath = url.pathname.replace(/\/+$/, '')
