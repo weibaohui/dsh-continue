@@ -432,6 +432,21 @@ function settingsSchema(S) {
 let Config = null
 try { Config = settingsSchema(Schema) } catch {}
 
+
+// 0.1.7 宿主 resolveConfig 会把 apply-config 里的 volatile 字段物化成 {}（实测）：
+// {} 会盖掉 DEFAULTS，导致 describe 就绪前/降级路径下拿到毒化值。这里只保留
+// 类型与默认值一致的标量/数组；真实持久化值走 describe 投影（liveSettings）。
+function saneConfigValues(config, defaults) {
+  const out = {}
+  for (const key of Object.keys(defaults)) {
+    const v = (config || {})[key]
+    if (v === undefined || v === null) continue
+    if (Array.isArray(defaults[key])) { if (Array.isArray(v)) out[key] = v; continue }
+    if (typeof v === typeof defaults[key]) out[key] = v
+  }
+  return out
+}
+
 module.exports = {
   name: 'dsh-continue',
   inject: ['agents', 'settings', 'webServer', 'llm', 'agentDefaultModel', 'compaction', 'connection'],
@@ -458,7 +473,7 @@ module.exports = {
     // settingsOverrides 进程内兜底（仅本次运行有效）。
     // 命名空间必须匹配 /^[a-z][a-z0-9-]*$/ —— 点号形式会被 settings 写入通道拒绝
     const SETTINGS_NS = 'dsh-continue'
-    const base = { ...DEFAULTS, ...(config || {}) }
+    const base = { ...DEFAULTS, ...saneConfigValues(config, DEFAULTS) }
     let liveSettings = {} // settings 文档实时值（document-updated 事件驱动刷新）
     const settingsOverrides = {} // 进程内兜底
     function readDescriptor() {
