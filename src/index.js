@@ -403,31 +403,39 @@ function sanitizePatch(body) {
   return patch
 }
 
-function settingsSchema() {
-  if (!Schema) return null
-  return Schema.object({
-    enabled: Schema.boolean().default(true),
-    prompt: Schema.string().default('继续'),
-    maxAttempts: Schema.number().min(1).default(50),
-    cooldownMs: Schema.number().min(0).default(5000),
-    backoffBaseMs: Schema.number().min(0).default(2000),
-    backoffMaxMs: Schema.number().min(1000).default(30000),
-    rules: Schema.array(Schema.object({
-      id: Schema.string().default(''),
-      when: Schema.string().default('any'),
-      action: Schema.string().default('continue'),
-      provider: Schema.string().default(''),
-      model: Schema.string().default(''),
-      maxAttempts: Schema.number().default(0),
-      codes: Schema.string().default(''),
-    })).default(DEFAULT_RULES),
-    notifyOnCap: Schema.boolean().default(true),
+// 0.1.7 settings 服务：字段标 .volatile() 才能被设置 UI 投影、才能经
+// ctx.settings.update 在线写回（对齐 dsh-settings-ui / hermes-loop）。
+function settingsSchema(S) {
+  if (!S || typeof S.object !== 'function') return null
+  return S.object({
+    enabled: S.boolean().default(true).volatile(),
+    prompt: S.string().default('继续').volatile(),
+    maxAttempts: S.number().min(1).default(50).volatile(),
+    cooldownMs: S.number().min(0).default(5000).volatile(),
+    backoffBaseMs: S.number().min(0).default(2000).volatile(),
+    backoffMaxMs: S.number().min(1000).default(30000).volatile(),
+    rules: S.array(S.object({
+      id: S.string().default(''),
+      when: S.string().default('any'),
+      action: S.string().default('continue'),
+      provider: S.string().default(''),
+      model: S.string().default(''),
+      maxAttempts: S.number().default(0),
+      codes: S.string().default(''),
+    })).default(DEFAULT_RULES).volatile(),
+    notifyOnCap: S.boolean().default(true).volatile(),
   })
 }
+// 0.1.7 loader 通过 entry.fiber.runtime.Config 自动发现 schema，必须在模块顶层导出。
+// schemastery <3.18.4 没有 .volatile()（独立安装场景）：降级为无 Config，
+// 设置写回不可用，但模块加载与插件运行不受影响。
+let Config = null
+try { Config = settingsSchema(Schema) } catch {}
 
 module.exports = {
   name: 'dsh-continue',
   inject: ['agents', 'settings', 'webServer', 'llm', 'agentDefaultModel', 'compaction', 'connection'],
+  Config,
   __internals: {
     reasonKind, computeBackoff, withinCooldown, isExcluded,
     decideTurnEnd, classifyFailure, failureNoticeText, firstMatchingRule, classToWhen,
@@ -443,30 +451,51 @@ module.exports = {
     const trace = makeTracer(activityFile)
     trace('armed', { pid: process.pid, config: { ...DEFAULTS, ...config } })
 
-    // ── Settings namespace (schemastery; zod is incompatible) ──
+    // ── 0.1.7 settings 接线（对齐 dsh-settings-ui / hermes-loop）──
+    // settings 服务不再支持 ctx.settings.register：Config 已在模块顶层导出
+    // （volatile 字段），读走 describe() 投影，写走 ctx.settings.update()
+    // （持久化进 profile patch，重启不丢）。服务缺席/写回失败时退回
+    // settingsOverrides 进程内兜底（仅本次运行有效）。
     // 命名空间必须匹配 /^[a-z][a-z0-9-]*$/ —— 点号形式会被 settings 写入通道拒绝
     const SETTINGS_NS = 'dsh-continue'
-    let settingsScope = null
-    const settingsOverrides = {}
-    const schema = settingsSchema()
-    if (schema && ctx.settings && typeof ctx.settings.register === 'function') {
+    const base = { ...DEFAULTS, ...(config || {}) }
+    let liveSettings = {} // settings 文档实时值（document-updated 事件驱动刷新）
+    const settingsOverrides = {} // 进程内兜底
+    function readDescriptor() {
       try {
-        settingsScope = ctx.settings.register(SETTINGS_NS, schema, { base: { ...DEFAULTS, ...config } })
-        trace('settings-registered', {})
-      } catch (e) {
-        trace('settings-register-failed', { message: String(e && e.message || e) })
-        ctx.logger.warn(`dsh-continue: settings register: ${e && e.message}`)
-      }
-    } else {
-      trace('settings-register-skipped', { schema: Boolean(schema), settingsType: typeof ctx.settings })
+        if (!ctx.settings || typeof ctx.settings.describe !== 'function') return null
+        return ctx.settings.describe().find((x) => x.ns === SETTINGS_NS) || null
+      } catch { return null }
     }
-    const effective = () => {
-      if (settingsScope && typeof settingsScope.get === 'function') {
-        const v = settingsScope.get()
-        if (v && typeof v === 'object') return { ...DEFAULTS, ...config, ...v }
+    // apply 时 loader 可能尚未就绪（describe 投影里还没有本插件条目），间隔重试
+    let liveSeen = false
+    function refreshLive(attempt = 0) {
+      const d = readDescriptor()
+      if (d) {
+        if (!liveSeen) trace('settings-live-ready', {})
+        liveSeen = true
+        if (d.value && typeof d.value === 'object') liveSettings = d.value
+        return
       }
-      return { ...DEFAULTS, ...config, ...settingsOverrides }
+      if (attempt < 15) setTimeout(() => { refreshLive(attempt + 1) }, 2000).unref?.()
     }
+    refreshLive()
+
+    const effective = () => ({ ...base, ...liveSettings, ...settingsOverrides })
+
+    // settings 文档变更（dsh 自动生成的设置页、本插件面板写回）刷新实时值
+    try {
+      if (ctx.on && typeof ctx.on === 'function') {
+        ctx.effect(() => {
+          const off = ctx.on('settings/document-updated', (ns) => {
+            if (ns !== SETTINGS_NS) return
+            const d = readDescriptor()
+            if (d && d.value && typeof d.value === 'object') liveSettings = d.value
+          })
+          return () => { try { off() } catch {} }
+        }, 'dsh-continue: settings watch')
+      }
+    } catch { /* 事件订阅不可用：写回后靠 settingsOverrides 维持本次运行 */ }
     const safeSettings = (eff) => ({
       enabled: eff.enabled, prompt: eff.prompt, maxAttempts: eff.maxAttempts,
       cooldownMs: eff.cooldownMs, backoffBaseMs: eff.backoffBaseMs, backoffMaxMs: eff.backoffMaxMs,
@@ -779,8 +808,11 @@ module.exports = {
           if (req.method === 'PUT' && apiPath.endsWith('/dsh-continue/api/settings')) {
             const body = await readJsonBody(req)
             const patch = sanitizePatch(body)
-            if (settingsScope && typeof settingsScope.update === 'function') await settingsScope.update(patch)
-            else Object.assign(settingsOverrides, patch)
+            Object.assign(settingsOverrides, patch)
+            if (ctx.settings && typeof ctx.settings.update === 'function') {
+              try { await ctx.settings.update(SETTINGS_NS, patch) }
+              catch (e) { ctx.logger.warn(`dsh-continue: settings update 失败（仅本次运行生效）: ${e && e.message}`) }
+            }
             const eff = effective()
             trace('settings-updated', { keys: Object.keys(patch) })
             sendJson(res, 200, { settings: safeSettings(eff) })
