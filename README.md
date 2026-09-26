@@ -5,7 +5,7 @@
 
 **自动续跑插件**：agent 会话中断后自动帮你续上，不用手敲「继续」。
 
-![自动续跑：有序规则表设置面板](docs/demo.gif)
+![自动续跑：有序规则表设置面板](https://raw.githubusercontent.com/weibaohui/dsh-continue/main/docs/demo.gif)
 
 ## 核心功能
 
