@@ -454,15 +454,35 @@ function saneConfigValues(config, defaults) {
   return out
 }
 
+// ── 压缩服务：懒解析，绝不进 inject ──────────────────────────────────────
+// 宿主平面是否挂载压缩后端是「组合」而不是本插件的依赖：
+//   · web bundle 默认把 compaction-basic 置为 disabled: true，压缩改由每个
+//     agent preset 在自己 isolate 域里挂载；
+//   · profile 也可能在宿主平面挂别的后端（例如 @aiwayds/dsh-dcp）。
+// 把 'compaction' 写进 inject 会让本插件 fiber 在那些 profile 上永久 pending；
+// 直接读 ctx.compaction 又会抛 `cannot get property "compaction" without inject`。
+// ctx.get 是「取不到就返回 undefined」的读法，缺席时降级为止损通知。
+function compactionOf(ctx) {
+  try { return typeof ctx.get === 'function' ? ctx.get('compaction') : undefined }
+  catch { return undefined }
+}
+
+function compactionArmedIn(ctx) {
+  const compaction = compactionOf(ctx)
+  return Boolean(compaction && typeof compaction.compactIfNeeded === 'function')
+}
+
 module.exports = {
   name: 'dsh-continue',
-  inject: ['agents', 'settings', 'webServer', 'llm', 'agentDefaultModel', 'compaction', 'connection'],
+  // 'compaction' 故意不在此声明——见上面的 compactionOf 说明。
+  inject: ['agents', 'settings', 'webServer', 'llm', 'agentDefaultModel', 'connection'],
   Config,
   __internals: {
     reasonKind, computeBackoff, withinCooldown, isExcluded,
     decideTurnEnd, classifyFailure, failureNoticeText, firstMatchingRule, classToWhen,
     parseCodes, matchesCodes,
     sanitizeRule, sanitizePatch, newSessionState, readActivityTail,
+    compactionOf, compactionArmedIn,
     DEFAULTS, DEFAULT_RULES, RULE_WHENS, RULE_ACTIONS, dshHome, EXCLUDE_ID_PREFIXES, settingsSchema,
   },
 
@@ -543,7 +563,10 @@ module.exports = {
       try {
         session.append('user/message', {
           content: [{ type: 'text', text }],
-          source: { kind: 'plugin', plugin: 'dsh-continue', form: 'notice', summary: text },
+          // producer-owned kind：dsh 0.1.7 移除了 'plugin' 通配来源，v4 会话准入
+          // 会直接拒绝 kind:'plugin'（format v4 message requires a
+          // producer-owned source kind），通知行根本写不进去。
+          source: { kind: 'dsh-continue', form: 'notice', summary: text },
         })
       } catch (e) { trace('notify-failed', { message: String(e && e.message) }) }
     }
@@ -567,14 +590,15 @@ module.exports = {
       void (async () => {
         try {
           const agent = ctx.agents && typeof ctx.agents.get === 'function' ? ctx.agents.get(sid) : undefined
-          if (!agent || !ctx.compaction || typeof ctx.compaction.compactIfNeeded !== 'function') {
+          const compaction = compactionOf(ctx)
+          if (!agent || !compaction || typeof compaction.compactIfNeeded !== 'function') {
             trace('compact-unavailable', { sessionId: sid, ruleId: action.rule.id })
             notifySession(session, '上下文超限：宿主未挂载压缩服务，自动续跑停止——请手动压缩或新开会话')
             return
           }
           st.compacting = true
           const controller = new AbortController()
-          const result = await ctx.compaction.compactIfNeeded(agent, 'context-overflow', controller.signal)
+          const result = await compaction.compactIfNeeded(agent, 'context-overflow', controller.signal)
           st.compacting = false
           if (result) {
             trace('compact-done', {
@@ -609,7 +633,9 @@ module.exports = {
           id: randomUUID(),
           role: 'user',
           content: [{ type: 'text', text: String(eff.prompt) }],
-          source: { kind: 'plugin', plugin: 'dsh-continue' },
+          // 同样的 producer-owned kind 约束：kind:'plugin' 会让续跑消息在
+          // 会话准入时被拒，这一轮还没开始就失败（本轮运行失败 · UNKNOWN）。
+          source: { kind: 'dsh-continue' },
         }
         try {
           agent.followup(message)
@@ -794,7 +820,7 @@ module.exports = {
               enabled: eff.enabled,
               settings: safeSettings(eff),
               armed: true,
-              compactionArmed: Boolean(ctx.compaction && typeof ctx.compaction.compactIfNeeded === 'function'),
+              compactionArmed: compactionArmedIn(ctx),
               activityFile: displayPath(activityFile),
               perSession: perSession.slice(-PERSESSION_TAIL),
               activityTail,

@@ -13,10 +13,14 @@
     - id: dsh-continue
       name: '@weibaohui/dsh-continue'
 
-# 本插件的 compact 规则动作依赖 ctx.compaction（CompactionEngine）。web bundle
-# 把 compaction-basic 标成了 disabled: true，而插件静态注入了 'compaction'
-# 服务——服务缺席会让插件 fiber 永久 pending 并导致宿主 boot 失败。因此这里
-# 随插件一并重新启用（本层在 web bundle 层之后应用，同 id 覆盖生效）。
-# 不希望启用压缩：删除本段，并把设置里的 compact 规则动作改掉。
-- id: compaction-basic
-  disabled: false
+# 本 patch 刻意不碰 compaction-basic。宿主平面是否挂载压缩后端属于「组合」，
+# 不是本插件的依赖：
+#   · web bundle 把该行标成 disabled: true——压缩后端改由每个 agent preset 在
+#     自己的 isolate 域内挂载；
+#   · profile 也可能在宿主平面挂另一个后端（例如 @aiwayds/dsh-dcp）。
+# 这里一旦写 disabled: false 就会两边都打架：bundle 补丁按 dsh.profile.bundles
+# 顺序应用、同一行后写覆盖先写，于是排在本包之后的 dsh-dcp 用它自己的
+# disabled: true 也压不回来，宿主平面出现两个 compaction 提供者，dsh-dcp
+# 激活失败：service "compaction" has been registered at <BasicCompactionEngine>。
+# 插件现在懒解析 ctx.get('compaction')：挂了后端就用，没挂就降级为止损通知
+# （compact 规则动作会写一行「宿主未挂载压缩服务」）。
