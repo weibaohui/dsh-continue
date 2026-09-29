@@ -333,11 +333,15 @@ function newSessionState() {
  *  - {type:'schedule', delay, attempt, cls, rule, override?}  send 继续 after `delay`
  *  - {type:'cap'}                       global cap or every rule exhausted → stop + notify
  *  - {type:'abort-notify', cls, rule}   matched rule says stop → one-line notice
- *  - {type:'skip', reason}              not eligible / pending / cooldown
+ *  - {type:'skip', reason}              not eligible / pending
  *  - {type:'noop'}                      kind unknown
  *
  * `failure` is the structured LlmFailure from reason=`error` (may be absent).
  * Rate-limited continues honor `providerRetryAfterMs` when the provider sent one.
+ * A failure arriving inside the cooldown window defers the continue to when the
+ * cooldown expires instead of dropping it: the auto-continued turn's own failure
+ * lands there nearly always (continue → new turn → LLM failure can take only a
+ * few milliseconds), and dropping it would strand the session after one attempt.
  */
 function decideTurnEnd(st, kind, eff, now, failure) {
   if (kind === 'completed') return { type: 'reset' }
@@ -352,11 +356,14 @@ function decideTurnEnd(st, kind, eff, now, failure) {
   // continue / continue-with / compact
   if (st.timer !== null) return { type: 'skip', reason: 'pending' }
   if (st.attempts >= eff.maxAttempts) return { type: 'cap' }
-  if (!withinCooldown(now, st.lastContinueAt, eff)) return { type: 'skip', reason: 'cooldown' }
   const attempt = st.attempts + 1
   let delay = computeBackoff(st.attempts, eff)
   if (cls && cls.cls === 'rate-limit' && failure && Number.isFinite(failure.providerRetryAfterMs))
     delay = Math.max(delay, failure.providerRetryAfterMs)
+  if (!withinCooldown(now, st.lastContinueAt, eff)) {
+    const remaining = (Number(eff.cooldownMs) || 0) - (now - st.lastContinueAt)
+    if (remaining > delay) delay = remaining
+  }
   const override = rule.action === 'continue-with' && rule.model
     ? { provider: rule.provider || '', model: rule.model, via: rule.id }
     : null
@@ -557,18 +564,25 @@ module.exports = {
       if (st.timer !== null) { try { clearTimeout(st.timer) } catch {} ; st.timer = null }
     }
 
-    /** Post one folded plugin notice line into the source session. */
+    /** Post one folded plugin notice line into the source session. Deferred to
+     *  a later tick — callers run inside session/event dispatch, and the host
+     *  rejects reentrant appends ("session append cannot reenter while another
+     *  append is being published"). `user/message` is surface-eligible, so the
+     *  append must also carry the `{ surfaceOp: 'append' }` marker or the host
+     *  drops it ("requires a surfaceOp marker"). The source kind must be
+     *  producer-owned: dsh 0.1.7 removed the 'plugin' catch-all and the native
+     *  v4 admission refuses it ("format v4 message requires a producer-owned
+     *  source kind"), so the row would never land. */
     const notifySession = (session, text) => {
       if (!session || typeof session.append !== 'function') return
-      try {
-        session.append('user/message', {
-          content: [{ type: 'text', text }],
-          // producer-owned kind：dsh 0.1.7 移除了 'plugin' 通配来源，v4 会话准入
-          // 会直接拒绝 kind:'plugin'（format v4 message requires a
-          // producer-owned source kind），通知行根本写不进去。
-          source: { kind: 'dsh-continue', form: 'notice', summary: text },
-        })
-      } catch (e) { trace('notify-failed', { message: String(e && e.message) }) }
+      setTimeout(() => {
+        try {
+          session.append('user/message', {
+            content: [{ type: 'text', text }],
+            source: { kind: 'dsh-continue', form: 'notice', summary: text },
+          }, { surfaceOp: 'append' })
+        } catch (e) { trace('notify-failed', { message: String(e && e.message) }) }
+      }, 0).unref?.()
     }
 
     const notifyCap = (session, eff) => {

@@ -166,13 +166,29 @@ test('decideTurnEnd: rule exhaustion falls through, then global cap', () => {
   assert.equal(decideTurnEnd(st, 'error', e, 1000, { code: 'RATE_LIMIT', message: 'x' }).type, 'cap')
 })
 
-test('decideTurnEnd: pending timer / cooldown / global maxAttempts still guard', () => {
+test('decideTurnEnd: pending timer / global maxAttempts still guard', () => {
   const st = newSessionState(); st.timer = {}
   assert.equal(decideTurnEnd(st, 'error', eff(), 1000, { code: 'RATE_LIMIT', message: 'x' }).reason, 'pending')
-  const st2 = newSessionState(); st2.lastContinueAt = 1000
-  assert.equal(decideTurnEnd(st2, 'error', eff({ cooldownMs: 5000 }), 2000, { code: 'RATE_LIMIT', message: 'x' }).reason, 'cooldown')
   const st3 = newSessionState(); st3.attempts = DEFAULTS.maxAttempts
   assert.equal(decideTurnEnd(st3, 'error', eff(), 1000, { code: 'RATE_LIMIT', message: 'x' }).type, 'cap')
+})
+
+test('decideTurnEnd: failure inside cooldown defers the continue instead of dropping it', () => {
+  // 回归：续跑轮自身的失败落在冷却窗口内（续跑 → 新轮 → LLM 失败可能只隔几毫秒），
+  // 旧实现直接丢弃，自动续跑在快速失败场景第一次续跑后就停摆。现在推迟到冷却期满。
+  const st = newSessionState()
+  st.attempts = 1
+  st.lastContinueAt = 1000
+  const a = decideTurnEnd(st, 'error', eff({ cooldownMs: 5000, backoffBaseMs: 100, backoffMaxMs: 200 }), 1003,
+    { code: 'UNKNOWN', message: 'fetch failed' })
+  assert.equal(a.type, 'schedule')
+  assert.equal(a.attempt, 2)
+  assert.ok(a.delay >= 4997, `delay ${a.delay} should cover the remaining 4997ms cooldown`)
+  // 冷却已过期：退避原样生效，不受冷却逻辑影响
+  const b = decideTurnEnd(st, 'error', eff({ cooldownMs: 5000, backoffBaseMs: 100, backoffMaxMs: 200 }), 9999,
+    { code: 'UNKNOWN', message: 'fetch failed' })
+  assert.equal(b.type, 'schedule')
+  assert.ok(b.delay <= 240, `delay ${b.delay} should be plain backoff`)
 })
 
 test('decideTurnEnd: rate-limit honors providerRetryAfterMs', () => {

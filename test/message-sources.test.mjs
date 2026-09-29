@@ -50,7 +50,8 @@ function makeHost({ compaction } = {}) {
   const appended = []
   const followups = []
   const agent = { id: 'session-test', followup: (message) => followups.push(message) }
-  const session = { id: 'session-test', append: (type, message) => appended.push({ type, message }) }
+  const appendedOps = []
+  const session = { id: 'session-test', append: (type, message, opts) => { appended.push({ type, message }); appendedOps.push(opts) } }
   const ctx = {
     logger: { info() {}, warn() {}, error() {} },
     settings: { register: () => ({ get: () => ({}), update: async () => {}, watch: () => {} }) },
@@ -65,7 +66,7 @@ function makeHost({ compaction } = {}) {
   // backoff/cooldown at 0 keeps the scheduling path immediate for the test.
   plugin.apply(ctx, { enabled: true, backoffBaseMs: 0, cooldownMs: 0 })
   const emit = (event) => { for (const handler of handlers['session/event'] || []) handler(session, event) }
-  return { ctx, session, agent, appended, followups, emit }
+  return { ctx, session, agent, appended, appendedOps, followups, emit }
 }
 
 const turnEnd = (failure) => ({ type: 'turn/end', data: { turn: 1, reason: { kind: 'error', error: failure } } })
@@ -91,13 +92,16 @@ test('compaction lookup degrades instead of throwing', () => {
   assert.equal(compactionArmedIn({ get: () => ({ compactIfNeeded() {} }) }), true)
 })
 
-test('session notices carry a producer-owned source kind', () => {
-  const { appended, emit } = makeHost()
+test('session notices carry a producer-owned source kind and a surfaceOp marker', async () => {
+  const { appended, appendedOps, emit } = makeHost()
   emit(turnEnd({ code: 'QUOTA', message: 'Insufficient Balance' }))
+  await tick() // notices post on a later tick — a sync append from inside session/event dispatch is rejected by the host
   assert.equal(appended.length, 1, 'the quota rule must post one stop notice')
   assert.equal(appended[0].type, 'user/message')
   assertProducerOwnedSource(appended[0].message)
   assert.equal(appended[0].message.source.kind, 'dsh-continue')
+  assert.equal(appendedOps[0] && appendedOps[0].surfaceOp, 'append',
+    'user/message is surface-eligible: the append must carry { surfaceOp: "append" }')
 })
 
 test('the auto-continue message carries a producer-owned source kind', async () => {
