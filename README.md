@@ -53,7 +53,8 @@ dsh plugin --profile web add @weibaohui/dsh-continue -w
 
 | 插件版本 | 适配 dsh 版本 | 备注 |
 |---------|--------------|------|
-| 0.3.10 | 0.1.7-rc.2 | 当前版本；max-tokens 输出截断纳入自动续跑（新增 `when: 'max-tokens'` 与默认规则 `r-max-tokens`，`aborted` 保持跳过），规则条件可视化编辑与中英文案同步（#6） |
+| 0.3.11 | 0.1.7-rc.2 | 当前版本；通知消息补 `id` 与 `role`，修复通知写入后整个会话下次打开即拒载（#8，#9）。已用真实宿主 dsh-session 0.2.0-rc.2 端到端实测通知写入→重载 |
+| 0.3.10 | 0.1.7-rc.2 | max-tokens 输出截断纳入自动续跑（新增 `when: 'max-tokens'` 与默认规则 `r-max-tokens`，`aborted` 保持跳过），规则条件可视化编辑与中英文案同步（#6） |
 | 0.3.9 | 0.1.7-rc.2 | 冷却窗口内的失败改为推迟续跑（修复快速失败场景只续跑一次即停摆）；通知延后投递并带 surfaceOp 标记（修复止损/达限通知静默丢失）。已在隔离 web 实例端到端实测续跑循环 |
 | 0.3.8 | 0.1.7-rc.2 | 适配 dsh 0.1.7 会话来源格式（producer-owned `dsh-continue` kind）与压缩后端懒解析（不再进 inject、不再改 compaction-basic 行），修复 web profile 续跑必失败 |
 | 0.3.4 | 0.1.7-rc.2 | 修复宿主将 volatile 字段物化为 {} 导致的设置毒化（saneConfigValues 清洗 + 移除 Config 兼容字符串字段） |
