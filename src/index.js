@@ -579,12 +579,23 @@ module.exports = {
      *  drops it ("requires a surfaceOp marker"). The source kind must be
      *  producer-owned: dsh 0.1.7 removed the 'plugin' catch-all and the native
      *  v4 admission refuses it ("format v4 message requires a producer-owned
-     *  source kind"), so the row would never land. */
+     *  source kind"), so the row would never land.
+     *
+     *  The notice also needs its own identity: for `user/message` the event's
+     *  `data` object IS the message, and the v4 loader requires a nonempty
+     *  `data.id` plus `data.role === 'user'` (assertMessageEventShape, called
+     *  from adoptSessionEvent). The append-time validator does NOT check those
+     *  two fields, so a row missing them is written silently and then fails at
+     *  the next load with "session event at seq N lacks an identified message",
+     *  which makes the whole session unloadable. `id` has been a required
+     *  `user/message` field since format v0. */
     const notifySession = (session, text) => {
       if (!session || typeof session.append !== 'function') return
       setTimeout(() => {
         try {
           session.append('user/message', {
+            id: randomUUID(),
+            role: 'user',
             content: [{ type: 'text', text }],
             source: { kind: 'dsh-continue', form: 'notice', summary: text },
           }, { surfaceOp: 'append' })
