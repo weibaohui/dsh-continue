@@ -218,7 +218,14 @@ window.__ModuleLoader__.load({
 
     // ── Pure helpers ────────────────────────────────────────────────────────
 
-    const API = '/dsh-continue/api'
+    // API 基址随页面走：子路径反代（如 https://host/app/dsh/）下，绝对路径 /dsh-continue/api
+    // 会打到站点根而 404。与宿主官方客户端一致，用 document.baseURI 推导（dsh-sync#14 同款）。
+    const API = (() => {
+      try {
+        const base = (typeof document !== 'undefined' && document.baseURI) || (typeof location !== 'undefined' ? location.href : '/')
+        return new URL('dsh-continue/api', new URL('.', base)).pathname.replace(/\/+$/, '')
+      } catch { return '/dsh-continue/api' }
+    })()
 
     async function getJson(url) {
       const r = await fetch(url)
