@@ -323,19 +323,30 @@ function SettingsSection({ t }) {
   const [rules, setRules] = useState(null)                  // null = 尚未加载
   const [modelCatalog, setModelCatalog] = useState(null)
   const [notifyOnCap, setNotifyOnCap] = useState(true)
+  // 表单装载/脏标记（dsh-sync 同款，issue#10）：loadedRef 记「服务端值首次到表单」，
+  // dirtyRef 记「用户动过表单」。15 秒轮询永远只刷新只读区（armed/会话计数/活动日志）；
+  // 用户动过表单后不再回写设置项，否则未保存的规则编辑会被服务端旧值还原。
+  const loadedRef = useRef(false)
+  const dirtyRef = useRef(false)
+  const rootRef = useRef(null)
 
   const onToast = (text, ms = 3000) => { setToastText(text); setTimeout(() => setToastText(null), ms) }
   const refresh = () => getJson(API + '/status').then(d => {
     setStatus(d)
     const s = d && d.settings || {}
-    setEnabled(s.enabled !== false)
-    if (typeof s.prompt === 'string') setPrompt(s.prompt)
-    setMaxAttempts(num(s.maxAttempts, 50))
-    setCooldownMs(num(s.cooldownMs, 5000))
-    setBackoffBaseMs(num(s.backoffBaseMs, 2000))
-    setBackoffMaxMs(num(s.backoffMaxMs, 30000))
-    setRules(Array.isArray(s.rules) && s.rules.length > 0 ? s.rules : [])
-    setNotifyOnCap(s.notifyOnCap !== false)
+    // 首次装载（含首轮请求失败后的首个成功轮）必回填；此后只在用户没动过表单时回写。
+    // 保存成功后 doSave 清掉 dirty，下一个轮询周期恢复「服务端值 → 表单」同步。
+    if (!loadedRef.current || !dirtyRef.current) {
+      loadedRef.current = true
+      setEnabled(s.enabled !== false)
+      if (typeof s.prompt === 'string') setPrompt(s.prompt)
+      setMaxAttempts(num(s.maxAttempts, 50))
+      setCooldownMs(num(s.cooldownMs, 5000))
+      setBackoffBaseMs(num(s.backoffBaseMs, 2000))
+      setBackoffMaxMs(num(s.backoffMaxMs, 30000))
+      setRules(Array.isArray(s.rules) && s.rules.length > 0 ? s.rules : [])
+      setNotifyOnCap(s.notifyOnCap !== false)
+    }
   }).catch(() => {})
   const refreshCatalog = () => getJson(API + '/models')
     .then(d => setModelCatalog(d && Array.isArray(d.providers) && d.providers.length > 0 ? d : null))
@@ -346,6 +357,19 @@ function SettingsSection({ t }) {
     const timer = setInterval(refresh, 15000)
     if (typeof timer.unref === 'function') timer.unref()
     return () => clearInterval(timer)
+  }, [])
+  // 用原生捕获监听而不是逐控件 React onChange：面板里任何 input/change 都算
+  // 「用户开始编辑」，此后轮询只刷状态区、不再覆盖表单值（含动态增删的规则行）。
+  useEffect(() => {
+    const el = rootRef.current
+    if (!el || typeof el.addEventListener !== 'function') return
+    const mark = () => { dirtyRef.current = true }
+    el.addEventListener('input', mark, true)
+    el.addEventListener('change', mark, true)
+    return () => {
+      el.removeEventListener('input', mark, true)
+      el.removeEventListener('change', mark, true)
+    }
   }, [])
 
   const doSave = async () => {
@@ -363,6 +387,7 @@ function SettingsSection({ t }) {
       })
       const d = await r.json().catch(() => ({}))
       if (!r.ok) throw new Error(d.error || 'HTTP ' + r.status)
+      dirtyRef.current = false // 保存成功：解除脏标记，下个轮询恢复「服务端值 → 表单」同步
       onToast(t('saved'), 2200)
       refresh()
     } catch (e) { onToast(e.message || t('operationFailed'), 4000) }
@@ -539,7 +564,7 @@ function SettingsSection({ t }) {
       '\u26A0\uFE0F ' + String((renderErr && renderErr.message) || renderErr))
   }
 
-  return h('div', { className: 'dc-page' },
+  return h('div', { ref: rootRef, className: 'dc-page' },
     h('div', { className: 'dc-body' }, body),
     toastText && h(InToast, { text: toastText }),
   )
